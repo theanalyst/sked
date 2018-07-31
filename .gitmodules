@@ -1,0 +1,3 @@
+[submodule "include/dmclock"]
+	path = include/dmclock
+	url = git://github.com/ceph/dmclock
