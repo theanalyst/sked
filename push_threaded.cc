@@ -19,7 +19,7 @@ struct Request {
     bool& req_ready;
     std::mutex& req_mtx;
     std::condition_variable& req_cv;
-    Request(int _id, bool& _req_ready, std::mutex& _mtx, std::condition_variable& _cv ) :
+    explicit Request(int _id, bool& _req_ready, std::mutex& _mtx, std::condition_variable& _cv ) :
 	req_id(_id), req_ready(_req_ready), req_mtx(_mtx), req_cv(_cv){};
 };
 
