@@ -16,11 +16,10 @@ std::mutex log_m;
 
 struct Request {
     int req_id;
-    bool& req_ready;
-    std::mutex& req_mtx;
+    std::atomic<bool>& ready;
     std::condition_variable& req_cv;
-    explicit Request(int _id, bool& _req_ready, std::mutex& _mtx, std::condition_variable& _cv ) :
-	req_id(_id), req_ready(_req_ready), req_mtx(_mtx), req_cv(_cv){};
+    explicit Request(int _id, std::atomic<bool>& _ready, std::condition_variable& _cv ) :
+	req_id(_id), ready(_ready), req_cv(_cv){};
 };
 
 class Scheduler {
@@ -36,20 +35,20 @@ public:
     Scheduler(Args&& ...args): queue(std::forward<Args>(args)...) {};
 
     void add_request(const ClientId& client, const ReqParams& param, const Time& time, Cost cost) {
-	bool req_ready = false;
 	std::condition_variable req_cv;
+	std::atomic<bool> ready {false};
 	std::mutex req_mtx;
 	int req_id = client + req_ctr++;
-	Request req(req_id, req_ready, req_mtx, req_cv);
+	Request req(req_id, ready, req_cv);
 	std::cout << "adding req for req_id:  "<< req_id << std::endl;
 	std::cout << "request added!" << std::endl;
 	queue.add_request_time(req,client, param, time, cost);
 	std::cout << "completing req: " << req_id << std::endl;
 	queue.request_completed();
-	// All ye of little faith
-	if (std::unique_lock<std::mutex> l(req_mtx); !req_ready){
+	if (std::unique_lock<std::mutex> l(req_mtx); ! ready.load())
+	{
 	    std::cout << "Wait initiated!" << std::endl;
-	    req_cv.wait(l,[&req_ready]{return req_ready;});
+	    req_cv.wait(l, [&ready]{ return ready.load();});
 	}
 
     }
@@ -87,13 +86,8 @@ int main(int argc, char *argv[])
     auto handle_req_f = [] (const ClientId& c, std::unique_ptr<Request> req,
 			    dmc::PhaseType phase, uint64_t req_cost) {
 	std::cout << "notifying...." << req->req_id << std::endl;
-	
-	{
-	    std::lock_guard<std::mutex> lg(req->req_mtx);
-	    req->req_ready = true;
-	    req->req_cv.notify_one();
-	}
-
+	req->ready = true;
+	req->req_cv.notify_one();
 	std::cout << "processed_req " << std::endl;
     };
     Scheduler sync_sched {client_info_f, server_ready_f, handle_req_f};
